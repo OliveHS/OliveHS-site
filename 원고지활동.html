@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>알록달록 원고지</title>
+  <style>
+    :root { --ink:#24324a; --paper:#fffdf5; --line:#e6a8a8; --sky:#e8f5ff; --red:#d83737; --yellow:#fff1a7; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; color:var(--ink); font-family:"Malgun Gothic", "Apple SD Gothic Neo", sans-serif; background:linear-gradient(135deg,#f3fbff 0%,#fff8df 100%); }
+    .wrap { max-width:1120px; margin:auto; padding:34px 20px 54px; }
+    header { display:flex; align-items:center; justify-content:space-between; gap:18px; margin-bottom:22px; }
+    h1 { margin:0; font-size:clamp(1.6rem,4vw,2.35rem); letter-spacing:-.06em; }
+    h1 span { color:#f08b28; }
+    .badge { margin:0; padding:8px 12px; border-radius:999px; background:#fff; color:#6c7d96; font-size:.88rem; white-space:nowrap; box-shadow:0 4px 15px #abc4d333; }
+    .layout { display:grid; grid-template-columns:minmax(270px, .85fr) minmax(0,1.55fr); gap:22px; align-items:start; }
+    .panel { background:#fff; border-radius:22px; padding:22px; box-shadow:0 12px 30px #718ca52b; }
+    h2 { font-size:1.12rem; margin:0 0 9px; }
+    .guide { margin:0 0 16px; font-size:.9rem; line-height:1.65; color:#63728a; }
+    .count { text-align:right; font-size:.82rem; color:#718096; margin:7px 2px 14px; }
+    .buttons { display:flex; flex-wrap:wrap; gap:8px; }
+    button { border:0; border-radius:12px; padding:11px 14px; cursor:pointer; font:600 .93rem "Malgun Gothic",sans-serif; transition:transform .15s,filter .15s; }
+    button:hover { transform:translateY(-1px); filter:brightness(.98); }
+    .primary { background:#397fc3; color:white; }
+    .secondary { background:#edf5fb; color:#3970a5; }
+    .paper-panel { padding:18px; overflow:hidden; }
+    .paper-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:13px; }
+    .paper-head h2 { margin:0; }
+    .grid { position:relative; display:grid; grid-template-columns:repeat(10, minmax(25px, 1fr)); border-top:1px solid var(--line); border-left:1px solid var(--line); background:var(--paper); }
+    .cell { position:relative; aspect-ratio:1/1; min-width:0; display:flex; align-items:center; justify-content:center; padding:0; background:transparent; border-radius:0; border-right:1px solid var(--line); border-bottom:1px solid var(--line); cursor:text; font-size:clamp(.92rem,2.3vw,1.35rem); line-height:1; }
+    .cell.period { justify-content:flex-start; align-items:flex-end; padding:0 0 13% 16%; }
+    .cell.active { box-shadow:inset 0 0 0 3px #69b6e9; z-index:1; }
+    .ime-input { position:absolute; z-index:3; margin:0; padding:0; border:0; outline:0; background:transparent; text-align:center; font:inherit; font-size:clamp(.92rem,2.3vw,1.35rem); line-height:1; color:var(--ink); caret-color:#397fc3; }
+    .cell.newline::after { content:"↵"; color:#c8baba; font-size:.75em; }
+    .cell:nth-child(10n) { border-right:1px solid var(--line); }
+    .hint { margin:13px 2px 0; color:#6f7d90; font-size:.84rem; line-height:1.5; }
+    .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+    @media (max-width:720px) { .wrap{padding:20px 13px 35px}.layout{grid-template-columns:1fr}.panel{border-radius:18px;padding:17px}.paper-panel{padding:13px}.grid{grid-template-columns:repeat(10,minmax(20px,1fr))} }
+    @media print { body{background:#fff}.wrap{max-width:none;padding:0} header,.layout>aside,.hint,.tip{display:none}.layout{display:block}.paper-panel{box-shadow:none;padding:0}.grid{grid-template-columns:repeat(10,1fr)} }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <div><h1><span>알록달록</span> 원고지</h1></div>
+      <p class="badge">글자를 한 칸에 하나씩!</p>
+    </header>
+    <section class="layout">
+      <aside class="panel">
+        <h2>원고지 쓰는 방법</h2>
+        <p class="guide">원고지의 칸을 직접 눌러 한 칸에 한 글자씩 써 보세요. 글자를 쓰면 다음 칸으로 자동 이동해요. <b>스페이스바</b>를 누르면 한 칸 띄어쓸 수 있어요.</p>
+        <div class="count"><span id="count">0</span> / 100칸 사용</div>
+        <div class="buttons">
+          <button class="primary" type="button" id="save">저장하기</button>
+          <button class="secondary" type="button" id="sample">예시 글</button>
+          <button class="secondary" type="button" id="clear">지우기</button>
+        </div>
+      </aside>
+      <section class="panel paper-panel" aria-label="원고지 미리보기">
+        <div class="paper-head"><h2>원고지</h2></div>
+        <div class="grid" id="grid" aria-label="입력한 글이 표시된 원고지"></div>
+        <p class="hint">스페이스바: 한 칸 띄기 · ← →: 칸 옮기기 · Backspace: 앞 칸 지우기</p>
+      </section>
+    </section>
+  </main>
+  <script>
+    const grid = document.getElementById('grid');
+    const count = document.getElementById('count');
+    let active = 0, composing = false, skipFinalInput = false, finalCompositionValue = '';
+    let cells = Array(100).fill('');
+    function render() {
+      count.textContent=cells.filter(x=>x !== '').length;
+      grid.innerHTML='';
+      for(let i=0;i<100;i++) { const cell=document.createElement('div'); cell.className='cell'; cell.dataset.index=i; cell.textContent=cells[i] === ' ' ? '' : cells[i]; if(cells[i] === ' ') cell.classList.add('space'); if(cells[i] === '.') cell.classList.add('period'); if(i===active) cell.classList.add('active'); cell.addEventListener('pointerdown',()=>selectCell(i)); grid.appendChild(cell); }
+      const input=document.createElement('input'); input.id='ime-input'; input.className='ime-input'; input.autocomplete='off'; input.setAttribute('aria-label','현재 원고지 칸에 글자 입력'); input.addEventListener('compositionstart',()=>{composing=true;}); input.addEventListener('compositionend',onCompositionEnd); input.addEventListener('input',onInput); input.addEventListener('keydown',onKey); input.addEventListener('paste',onPaste); grid.appendChild(input); placeInput();
+    }
+    function ime() { return document.getElementById('ime-input'); }
+    function placeInput() { const input=ime(), cell=grid.querySelector(`.cell[data-index="${active}"]`); if(!input || !cell) return; const a=grid.getBoundingClientRect(), b=cell.getBoundingClientRect(); input.style.left=`${b.left-a.left}px`; input.style.top=`${b.top-a.top}px`; input.style.width=`${b.width}px`; input.style.height=`${b.height}px`; }
+    function refresh() {
+      count.textContent=cells.filter(x=>x !== '').length;
+      grid.querySelectorAll('.cell').forEach(cell => { const i=Number(cell.dataset.index); cell.textContent=cells[i] === ' ' ? '' : cells[i]; cell.classList.toggle('space',cells[i] === ' '); cell.classList.toggle('period',cells[i] === '.'); cell.classList.toggle('active',i === active); });
+      placeInput();
+    }
+    function selectCell(i) { active=Math.max(0,Math.min(99,i)); const input=ime(); if(input) input.value=''; refresh(); ime().focus(); }
+    function save() { localStorage.setItem('manuscript-cells', JSON.stringify(cells)); }
+    function update() { save(); refresh(); }
+    function commit() { const input=ime(), value=input.value; if(!value) return; cells[active]=[...value].slice(-1)[0]; input.value=''; if(active<99) active++; update(); input.focus(); }
+    function onCompositionEnd() {
+      finalCompositionValue=ime().value; composing=false; skipFinalInput=true; commit();
+      // 조합 완료 뒤에 따라오는 브라우저의 보조 input 신호만 한 번 무시합니다.
+      // 신호가 없는 입력기에서도 다음 일반 글자가 건너뛰지 않게 바로 해제합니다.
+      setTimeout(()=>{ skipFinalInput=false; finalCompositionValue=''; },0);
+    }
+    function onInput(event) {
+      if(event.isComposing || composing) return;
+      if(skipFinalInput) {
+        skipFinalInput=false;
+        // 조합 완료 글자가 다시 전달된 신호만 무시합니다. 바로 입력한 마침표 등은 처리합니다.
+        if(event.target.value === '' || event.target.value === finalCompositionValue) return;
+      }
+      commit();
+    }
+    function onKey(event) { if(event.isComposing || composing) return; if(event.key === ' ') { event.preventDefault(); cells[active]=' '; if(active<99) active++; update(); ime().focus(); } else if(event.key === 'Backspace' && !event.target.value) { event.preventDefault(); if(active>0) { active--; cells[active]=''; update(); ime().focus(); } } else if(event.key === 'ArrowLeft') { event.preventDefault(); selectCell(active-1); } else if(event.key === 'ArrowRight') { event.preventDefault(); selectCell(active+1); } else if(event.key === 'ArrowUp') { event.preventDefault(); selectCell(active-10); } else if(event.key === 'ArrowDown') { event.preventDefault(); selectCell(active+10); } }
+    function onPaste(event) { event.preventDefault(); const pasted=(event.clipboardData.getData('text') || '').replace(/[\r\n]/g,''); [...pasted].slice(0,100-active).forEach((char,n)=>cells[active+n]=char); active=Math.min(99,active+pasted.length); update(); ime().focus(); }
+    function saveImage() {
+      const size=1200, cell=size/10, canvas=document.createElement('canvas');
+      canvas.width=size; canvas.height=size;
+      const ctx=canvas.getContext('2d');
+      ctx.fillStyle='#fffdf5'; ctx.fillRect(0,0,size,size);
+      ctx.strokeStyle='#e6a8a8'; ctx.lineWidth=2;
+      for(let i=0;i<=10;i++) { const p=i*cell; ctx.beginPath(); ctx.moveTo(p,0); ctx.lineTo(p,size); ctx.stroke(); ctx.beginPath(); ctx.moveTo(0,p); ctx.lineTo(size,p); ctx.stroke(); }
+      ctx.fillStyle='#24324a'; ctx.font='52px "Malgun Gothic", sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      cells.forEach((char,i)=>{ if(!char || char===' ') return; const x=(i%10)*cell, y=Math.floor(i/10)*cell; if(char==='.') { ctx.textAlign='left'; ctx.textBaseline='alphabetic'; ctx.fillText('.',x+cell*.16,y+cell*.84); ctx.textAlign='center'; ctx.textBaseline='middle'; } else { ctx.fillText(char,x+cell/2,y+cell/2); } });
+      const link=document.createElement('a'); link.download='원고지-글쓰기.png'; link.href=canvas.toDataURL('image/png'); link.click();
+    }
+    document.getElementById('save').addEventListener('click',saveImage);
+    document.getElementById('sample').addEventListener('click',()=>{cells=Array(100).fill(''); [...'오늘은 친구와 공원에 갔어요. 정말 재미있었고 또 가고 싶어요.'].forEach((char,i)=>cells[i]=char); active=0; update();});
+    document.getElementById('clear').addEventListener('click',()=>{cells=Array(100).fill('');active=0;localStorage.removeItem('manuscript-cells');refresh();});
+    try { const saved=JSON.parse(localStorage.getItem('manuscript-cells')); if(Array.isArray(saved)) cells=Array.from({length:100},(_,i)=>saved[i] || ''); } catch (_) {} render();
+  </script>
+</body>
+</html>
