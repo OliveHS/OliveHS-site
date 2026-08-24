@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light">
 <title>의사결정트리로 분류하기 - 무는 원숭이, 물지 않는 원숭이</title>
 <style>
   :root{
@@ -149,8 +150,29 @@
   .empty-builder{ display:flex; flex-direction:column; gap:8px; align-items:center; }
   .empty-builder select{ border:2px solid var(--line); border-radius:8px; padding:7px 8px; font-size:0.82rem; max-width:230px; }
   .leaf-buttons{ display:flex; gap:6px; flex-wrap:wrap; justify-content:center; }
-  .custom-q-form{ flex-direction:column; gap:6px; align-items:stretch; width:230px; background:var(--bg); border-radius:10px; padding:10px; margin-top:2px; }
+  .custom-q-form{ display:flex; flex-direction:column; gap:6px; align-items:stretch; width:230px; background:var(--bg); border-radius:10px; padding:10px; margin-top:2px; }
   .custom-q-form input, .custom-q-form select{ border:2px solid var(--line); border-radius:8px; padding:6px 8px; font-size:0.78rem; width:100%; }
+
+  /* step 2 layout: tree builder + right-side question log */
+  .builder-layout{ display:flex; align-items:flex-start; gap:18px; }
+  .builder-layout .tree-wrap{ flex:1 1 auto; min-width:0; }
+  .question-log{
+    flex:0 0 240px; width:240px; background:var(--bg); border:2px solid var(--line);
+    border-radius:12px; padding:14px 16px; position:sticky; top:64px; max-height:70vh; overflow-y:auto;
+  }
+  .question-log h3{ margin:0 0 4px; font-size:0.95rem; color:var(--teal-dark); }
+  .question-log p.hint{ margin:0 0 10px; font-size:0.76rem; color:#777; }
+  .question-log ol{ margin:0; padding-left:20px; }
+  .question-log li{ margin-bottom:10px; font-size:0.82rem; }
+  .question-log li .qf-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .question-log li .qf-text{ font-weight:700; }
+  .question-log li .qf-delete{ flex:0 0 auto; padding:3px 9px; font-size:0.7rem; }
+  .question-log li .qf-key{ display:block; margin-top:2px; font-size:0.72rem; color:var(--teal-dark); }
+  .question-log .empty-log{ font-size:0.8rem; color:var(--gray); }
+  @media(max-width:760px){
+    .builder-layout{ flex-direction:column; }
+    .question-log{ width:100%; flex:1 1 auto; position:static; max-height:none; }
+  }
 
   table.result-table{ width:100%; border-collapse:collapse; margin-top:14px; font-size:0.86rem; }
   table.result-table th, table.result-table td{ border-bottom:1px solid var(--line); padding:8px 6px; text-align:center; }
@@ -254,7 +276,14 @@
         <button class="btn btn-small btn-outline" id="refToggleBtn">학습 데이터 숨기기</button>
         <div id="trainGalleryRef" class="compact"></div>
       </div>
-      <div class="tree-wrap"><div id="treeBuilder"></div></div>
+      <div class="builder-layout">
+        <div class="tree-wrap"><div id="treeBuilder"></div></div>
+        <aside class="question-log">
+          <h3>내가 만든 질문</h3>
+          <p class="hint">만든 순서대로 여기에 모두 정리돼요. 언제든 확인할 수 있어요.</p>
+          <div id="questionLog"></div>
+        </aside>
+      </div>
       <div class="nav-actions">
         <button class="btn btn-outline" data-goto="1">&larr; 이전</button>
         <button class="btn btn-primary" data-goto="3">학습 데이터로 검증하기 &rarr;</button>
@@ -356,19 +385,8 @@ const MONKEY_DATA = {
 };
 
 /* 질문(id)은 화면에 보이는 문구, key는 실제 판단 기준(특징)입니다.
-   같은 key를 쓰는 질문이 이미 경로에 사용됐다면 중복으로 취급해 목록에서 제외합니다. */
-const QUESTIONS = [
-  {id:'eyesopen', text:'눈을 뜨고 있나요?', key:'eyesopen'},
-  {id:'teeth', text:'이빨(치아)이 보이고 있나요?', key:'teeth'},
-  {id:'eyex', text:'눈이 X 모양인가요?', key:'eyex'},
-  {id:'smile', text:'미소 짓고 있나요?', key:'teeth'},
-  {id:'openred', text:'입을 크게 벌려 빨간 입 속이 보이나요?', key:'openred'},
-  {id:'tongue', text:'혀를 쑥 내밀고 있나요?', key:'tongue'},
-  {id:'mouthclosed', text:'입을 다물고 조용히 있나요?', key:'mouthclosed'},
-  {id:'eyewink', text:'한쪽 눈만 찡긋 감고 있나요? (윙크)', key:'eyewink'},
-  {id:'eyeclosed', text:'두 눈을 모두 살포시 감고 있나요?', key:'eyeclosed'},
-  {id:'eyenormal', text:'두 눈을 동그랗게 뜨고 있나요? (둘 다 뜬 눈)', key:'eyenormal'},
-];
+   같은 key를 쓰는 질문이 이미 경로에 사용됐다면 중복으로 취급해 목록에서 제외합니다.
+   미리 정해진 질문은 없으며, 학생이 직접 입력한 질문(state.customQuestions)만 사용됩니다. */
 const FEATURE_TESTS = {
   teeth: m => m.mouth === 'teeth',
   openred: m => m.mouth === 'open_red',
@@ -391,6 +409,25 @@ const FEATURE_OPTIONS = [
   {key:'eyenormal', label:'두 눈을 모두 동그랗게 뜨고 있음'},
   {key:'eyesopen', label:'눈을 뜨고 있음 (윙크 포함)'},
 ];
+/* 학생이 입력한 질문 문구에서 실제로 확인 가능한 특징(키)을 추측합니다.
+   위에서부터 순서대로 검사해서 가장 먼저 맞는 규칙을 사용하고,
+   어떤 규칙에도 안 맞으면 순환 배정으로 폴백합니다. */
+const FEATURE_KEYWORD_RULES = [
+  { key:'eyex', test: t => t.includes('눈') && /x|엑스/i.test(t) },
+  { key:'eyewink', test: t => t.includes('윙크') || t.includes('한쪽') },
+  { key:'openred', test: t => t.includes('빨간') || t.includes('빨갛') },
+  { key:'tongue', test: t => t.includes('혀') },
+  { key:'teeth', test: t => t.includes('이빨') || t.includes('치아') || t.includes('이가 보') },
+  { key:'mouthclosed', test: t => t.includes('다물') },
+  { key:'eyeclosed', test: t => t.includes('눈') && t.includes('감') },
+  { key:'eyenormal', test: t => t.includes('동그랗게') || t.includes('둘 다') },
+  { key:'eyesopen', test: t => t.includes('눈') && t.includes('뜨') },
+];
+function guessFeatureKey(text){
+  const rule = FEATURE_KEYWORD_RULES.find(r => r.test(text));
+  if(rule) return rule.key;
+  return FEATURE_OPTIONS[state.customQuestions.length % FEATURE_OPTIONS.length].key;
+}
 let customQuestionCounter = 0;
 const TRAIN_BITE = ['06','07','08','15'];
 const TRAIN_NOBITE = ['01','02','04','09','12','14','17','18'];
@@ -406,7 +443,7 @@ let state = {
 };
 
 function allQuestions(){
-  return QUESTIONS.concat(state.customQuestions);
+  return state.customQuestions;
 }
 
 /* ---------- generic helpers ---------- */
@@ -556,6 +593,53 @@ function renderTreeBuilder(){
   wrap.innerHTML = '';
   const rootEl = renderNode(state.tree, [], [], 1);
   wrap.appendChild(rootEl);
+  renderQuestionLog();
+}
+
+function featureLabel(key){
+  const f = FEATURE_OPTIONS.find(f=>f.key===key);
+  return f ? f.label : key;
+}
+
+function renderQuestionLog(){
+  const wrap = document.getElementById('questionLog');
+  if(!wrap) return;
+  if(!state.customQuestions.length){
+    wrap.innerHTML = '<div class="empty-log">아직 만든 질문이 없어요. 트리에서 "이 질문 추가하기"로 첫 질문을 만들어보세요.</div>';
+    return;
+  }
+  let html = '<ol>';
+  state.customQuestions.forEach((q)=>{
+    html += '<li><div class="qf-row"><span class="qf-text">'+escapeHTML(q.text)+'</span>' +
+      '<button class="btn btn-small btn-outline qf-delete" data-qdelete="'+q.id+'">삭제</button></div>' +
+      '<span class="qf-key">사진에서 확인하는 기준: '+escapeHTML(featureLabel(q.key))+'</span></li>';
+  });
+  html += '</ol>';
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('[data-qdelete]').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      resetWithConfirm(e.target, ()=>{
+        deleteCustomQuestion(btn.getAttribute('data-qdelete'));
+      });
+    });
+  });
+}
+
+function removeQuestionFromTree(node, qid){
+  if(!node || node.type !== 'question') return node;
+  if(node.qid === qid) return {type:'empty'};
+  return {
+    type:'question', qid:node.qid, key:node.key,
+    yes: removeQuestionFromTree(node.yes, qid),
+    no: removeQuestionFromTree(node.no, qid),
+  };
+}
+
+function deleteCustomQuestion(qid){
+  state.customQuestions = state.customQuestions.filter(q => q.id !== qid);
+  state.tree = removeQuestionFromTree(state.tree, qid);
+  state.testRun = null;
+  renderAll();
 }
 
 function renderNode(node, path, usedKeys, order){
@@ -568,25 +652,20 @@ function renderNode(node, path, usedKeys, order){
     box.className = 'empty-builder';
 
     const available = allQuestions().filter(q => usedKeys.indexOf(q.key) === -1);
-    let selectHTML = '<select class="qselect"><option value="">질문 선택...</option>';
+    let selectHTML = '<select class="qselect"><option value="">이미 만든 질문 다시 쓰기...</option>';
     available.forEach(q=>{ selectHTML += '<option value="'+q.id+'">'+q.text+'</option>'; });
     selectHTML += '</select>';
 
-    const uid = 'ce_' + Math.random().toString(36).slice(2,9);
     box.innerHTML =
-      '<div class="node-box empty">'+order+'번째로 물어볼 질문을 선택하거나<br>결과를 정해주세요</div>' +
-      (available.length ? selectHTML : '<div style="font-size:0.72rem;color:var(--gray);">사용 가능한 질문을 모두 썼어요.</div>') +
+      '<div class="node-box empty">'+order+'번째로 물어볼 질문을 직접 만들거나<br>결과를 정해주세요</div>' +
+      '<div class="custom-q-form">' +
+        '<input type="text" class="cq-text" placeholder="예: 귀가 쫑긋 서 있나요?">' +
+        '<button class="btn btn-small btn-primary" data-cqadd="1">이 질문 추가하기</button>' +
+      '</div>' +
+      (available.length ? selectHTML : '') +
       '<div class="leaf-buttons">' +
         '<button class="btn btn-small btn-orange" data-leaf="bite">무는 원숭이로 정하기</button>' +
         '<button class="btn btn-small" style="background:var(--nobite);color:#fff;" data-leaf="no-bite">물지 않는 원숭이로 정하기</button>' +
-      '</div>' +
-      '<button class="path-toggle" data-customtoggle="'+uid+'" style="margin-top:6px;">+ 새로운 질문 만들기</button>' +
-      '<div class="custom-q-form" id="'+uid+'" style="display:none;">' +
-        '<input type="text" class="cq-text" placeholder="예: 귀가 쫑긋 서 있나요?">' +
-        '<select class="cq-key">' +
-          FEATURE_OPTIONS.map(f=>'<option value="'+f.key+'">"예"가 되려면: '+f.label+'</option>').join('') +
-        '</select>' +
-        '<button class="btn btn-small btn-primary" data-cqadd="1">이 질문 추가하기</button>' +
       '</div>';
 
     const select = box.querySelector('.qselect');
@@ -606,25 +685,22 @@ function renderNode(node, path, usedKeys, order){
         renderAll();
       });
     });
-    const toggleBtn = box.querySelector('[data-customtoggle]');
-    const formEl = box.querySelector('#'+uid);
-    toggleBtn.addEventListener('click', ()=>{
-      const showing = formEl.style.display !== 'none';
-      formEl.style.display = showing ? 'none' : 'flex';
-      toggleBtn.textContent = showing ? '+ 새로운 질문 만들기' : '- 취소';
-    });
     const cqAddBtn = box.querySelector('[data-cqadd]');
-    cqAddBtn.addEventListener('click', ()=>{
-      const textInput = box.querySelector('.cq-text');
-      const keySelect = box.querySelector('.cq-key');
-      const txt = textInput.value.trim();
-      if(!txt){ textInput.focus(); return; }
+    const cqTextInput = box.querySelector('.cq-text');
+    const addCustomQuestion = ()=>{
+      const txt = cqTextInput.value.trim();
+      if(!txt){ cqTextInput.focus(); return; }
+      const key = guessFeatureKey(txt);
       customQuestionCounter++;
-      const newQ = { id:'custom_'+customQuestionCounter, text:txt, key:keySelect.value };
+      const newQ = { id:'custom_'+customQuestionCounter, text:txt, key:key };
       state.customQuestions.push(newQ);
       setNodeAtPath(path, {type:'question', qid:newQ.id, key:newQ.key, yes:{type:'empty'}, no:{type:'empty'}});
       state.testRun = null;
       renderAll();
+    };
+    cqAddBtn.addEventListener('click', addCustomQuestion);
+    cqTextInput.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter'){ e.preventDefault(); addCustomQuestion(); }
     });
     container.appendChild(box);
     return container;
